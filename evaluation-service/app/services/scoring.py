@@ -50,8 +50,17 @@ def score_answer(
     rubric_dimensions: list of {dimension_key, dimension_label, description}
     fetched from the rubrics table for this interview_type.
     """
-    groq = get_groq()
+    # No answer recorded (empty transcript) — skip Groq entirely.
+    if not transcript or not transcript.strip():
+        zeros = {d["dimension_key"]: 0 for d in rubric_dimensions}
+        return {
+            "scores": {"communication": 0.0, "technicalAccuracy": 0.0,
+                       "confidence": 0.0, "problemSolving": 0.0},
+            "dimension_scores": zeros,
+            "feedback": "No answer was recorded for this question.",
+        }
 
+    groq = get_groq()
     rubric_text = "\n".join(
         f"- {d['dimension_label']} ({d['dimension_key']}): {d['description']}"
         for d in rubric_dimensions
@@ -190,7 +199,8 @@ Candidate's transcribed answer:
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.2,      # low temperature = consistent, less creative scoring
-        max_tokens=500,
+        max_tokens=1000,
+        response_format = {"type": "json_object"}
     )
 
     raw = response.choices[0].message.content.strip()
@@ -205,7 +215,17 @@ Candidate's transcribed answer:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        raise RuntimeError(f"Invalid JSON returned by Groq:\n{raw}")
+        try:
+            parsed = json.loads(raw[: raw.rfind("}") + 1]) if "}" in raw else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        if not parsed:
+            return {
+                "scores": {"communication": 0.0, "technicalAccuracy": 0.0,
+                           "confidence": 0.0, "problemSolving": 0.0},
+                "dimension_scores": {},
+                "feedback": "Scoring could not be completed for this answer. Please try again.",
+            }
     dimension_scores: dict = parsed.get("dimension_scores", {})
     feedback: str = parsed.get("feedback", "")
 
