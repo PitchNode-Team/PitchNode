@@ -6,7 +6,6 @@ import {
   evaluateAnswerApi,
   startQuestionsApi,
   nextQuestionApi,
-  markAnsweredApi,
   completeSessionApi,
   generateQuestionsApi,
 } from "../api/interviewApi";
@@ -261,7 +260,7 @@ function AiInterviewRoom({ settings, questions }) {
 
     if (apiMode && apiQuestion) {
       try {
-        await markAnsweredApi(sessionId, apiQuestion.id);
+        // await markAnsweredApi(sessionId, apiQuestion.id);
         const q = await nextQuestionApi(sessionId);
         setApiQuestion(q.data);
       } catch (err) {
@@ -280,9 +279,9 @@ function AiInterviewRoom({ settings, questions }) {
   const finishInterview = () => {
     window.speechSynthesis?.cancel();
 
-    if (apiMode && apiQuestion) {
-      markAnsweredApi(sessionId, apiQuestion.id).catch(() => {});
-    }
+    // if (apiMode && apiQuestion) {
+    //   markAnsweredApi(sessionId, apiQuestion.id).catch(() => {});
+    // }
 
     if (apiMode) {
       completeSessionApi(sessionId).catch(() => {}); 
