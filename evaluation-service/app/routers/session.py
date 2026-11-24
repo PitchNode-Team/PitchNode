@@ -85,6 +85,7 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
     session = session_result.data[0]
     if session["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="Session not found")
+    
     evals = (
         supabase.table("evaluations")
         .select("*, questions(prompt)")
@@ -92,46 +93,59 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
         .order("created_at")
         .execute()
     )
+
+    # Labels for the real rubric dimensions of this interview type, so the
+    # frontend can show "Problem Understanding" instead of a raw key.
+    rubric_rows = (
+        supabase.table("rubrics")
+        .select("dimension_key, dimension_label, description")
+        .eq("interview_type", session.get("interview_type"))
+        .execute()
+    )
+    labels = {r["dimension_key"]: r["dimension_label"] for r in (rubric_rows.data or [])}
+    descriptions = {r["dimension_key"]: r["description"] for r in (rubric_rows.data or [])}
+
     per_question = []
-    all_scores: dict[str, list[float]] = {"communication": [], "technicalAccuracy": [], "confidence": [], "problemSolving": []}
+    # Average each real dimension across all answers, to rank strengths/weaknesses.
+    dim_totals: dict[str, list[float]] = {}
     for e in evals.data:
-        scores = e.get("rubric_scores") or {}
+        # Prefer the real per-dimension scores; fall back to the old 4-bucket
+        # rubric_scores for evaluations written before dimension_scores existed.
+        scores = e.get("dimension_scores") or e.get("rubric_scores") or {}
         per_question.append({
             "question_id": e["question_id"],
             "question_text": e["questions"]["prompt"] if e.get("questions") else "",
             "scores": scores,
             "feedback": e.get("feedback", ""),
         })
-        for key in all_scores:
-            if key in scores:
-                all_scores[key].append(scores[key])
-    avg_scores = {k: round(sum(v) / len(v), 1) if v else 0 for k, v in all_scores.items()}
+        for key, val in scores.items():
+            if isinstance(val, (int, float)):
+                dim_totals.setdefault(key, []).append(val)
+
+    avg_scores = {k: round(sum(v) / len(v), 1) if v else 0 for k, v in dim_totals.items()}
     sorted_dims = sorted(avg_scores.items(), key=lambda x: x[1], reverse=True)
     strengths = [d[0] for d in sorted_dims[:2] if d[1] > 0]
     weaknesses = [d[0] for d in sorted_dims[-1:] if d[1] > 0]
-    recommendation = ""
 
+    recommendation = ""
     scored = [e for e in evals.data if e.get("overall_score") is not None]
     if scored:
         weakest_eval = min(scored, key=lambda e: e["overall_score"])
         recommendation = (weakest_eval.get("feedback") or "").strip()
-
     if not recommendation:
         weakest_dim_key = sorted_dims[-1][0] if sorted_dims else None
-        dim_desc = {
-            "communication": "Practice structuring your answers clearly before speaking.",
-            "technicalAccuracy": "Review core concepts and practice explaining them out loud.",
-            "confidence": "Work on pacing, reduce filler words, and pause deliberately.",
-            "problemSolving": "Walk through your reasoning step by step before jumping to answers.",
-        }
-        recommendation = dim_desc.get(weakest_dim_key, "Keep practicing across all dimensions.")
-
+        recommendation = (
+            descriptions.get(weakest_dim_key)
+            or "Keep practicing across all dimensions."
+        )
+        
     return {
         "session_id": session_id,
         "interview_type": session.get("interview_type"),
         "difficulty": session.get("difficulty"),
         "overall_score": session.get("overall_score"),
         "per_question": per_question,
+        "labels": labels,
         "strengths": strengths,
         "weaknesses": weaknesses,
         "recommendation": recommendation,
