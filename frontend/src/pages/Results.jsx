@@ -48,6 +48,7 @@ function buildViewFromState(state){
     strengths,
     weaknesses: [METRIC_LABELS[weakestKey]],
     recommendation: RECOMMENDATIONS[weakestKey],
+    labels: METRIC_LABELS,
     perQuestion: answers.map((a) => ({
       key: a.index,
       number: a.index + 1,
@@ -60,30 +61,25 @@ function buildViewFromState(state){
 
 function buildViewFromApi (data){
   const perQuestion = data.per_question || [];
-  const strengthKeys = data.strengths || [];
-  const weaknessKeys = data.weaknesses || [];
-  const weakestKey = weaknessKeys[0];
+  const labels = data.labels || {};
+  const labelFor = (k) => labels[k] || METRIC_LABELS[k] || k;
 
   return {
     typeLine: [data.interview_type, data.difficulty].filter(Boolean).join(" · "),
     subtitle: `${perQuestion.length} question${perQuestion.length === 1 ? "" : "s"} answered`,
     overall: Math.round(data.overall_score ?? 0),
-    strengths: strengthKeys.map((k) => METRIC_LABELS[k]).filter(Boolean),
-    weaknesses: weaknessKeys.map((k) => METRIC_LABELS[k]).filter(Boolean),
-    recommendation:
-      data.recommendation ||
-      (weakestKey && RECOMMENDATIONS[weakestKey]) ||
-        "Keep practicing across all dimensions.",
-        perQuestion: perQuestion.map((q, i) => ({
-          key: q.question_id || i,
-          number: i + 1,
-          question: q.question_text || "Question",
-          scores: q.scores || {},
-          feedback: q.feedback || "",
-          })
-      ),
+    strengths: (data.strengths || []).map(labelFor),
+    weaknesses: (data.weaknesses || []).map(labelFor),
+    recommendation: data.recommendation || "Keep practicing across all dimensions.",
+    labels,
+    perQuestion: perQuestion.map((q, i) => ({
+      key: q.question_id || i,
+      number: i + 1,
+      question: q.question_text || "Question",
+      scores: q.scores || {},
+      feedback: q.feedback || "",
+    })),
   };
-
 }
 
 function Results() {
@@ -174,7 +170,7 @@ function Results() {
     );
   }
 
-  const { typeLine, subtitle, overall, strengths, weaknesses, recommendation, perQuestion } = view; 
+  const { typeLine, subtitle, overall, strengths, weaknesses, recommendation, perQuestion, labels } = view; 
 
   return (
     <>
@@ -246,7 +242,7 @@ function Results() {
               <div className="dash-q__metrics">
                 {Object.entries(a.scores).map(([k, v]) => (
                   <div key={k} className="dash-q__metric">
-                    <span>{METRIC_LABELS[k]}</span>
+                    <span>{labels[k] || METRIC_LABELS[k] || k}</span>
                     <span className="dash-q__value">{v}%</span>
                     <div className="dash-metricbar">
                       <div
