@@ -109,13 +109,23 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
     sorted_dims = sorted(avg_scores.items(), key=lambda x: x[1], reverse=True)
     strengths = [d[0] for d in sorted_dims[:2] if d[1] > 0]
     weaknesses = [d[0] for d in sorted_dims[-1:] if d[1] > 0]
-    recommendations = {
-        "communication": "Practice structuring your answers clearly before speaking.",
-        "technicalAccuracy": "Review core concepts and practice explaining them out loud.",
-        "confidence": "Work on pacing, reduce filler words, and pause deliberately.",
-        "problemSolving": "Walk through your reasoning step by step before jumping to answers.",
-    }
-    weakest = sorted_dims[-1][0] if sorted_dims else None
+    recommendation = ""
+
+    scored = [e for e in evals.data if e.get("overall_score") is not None]
+    if scored:
+        weakest_eval = min(scored, key=lambda e: e["overall_score"])
+        recommendation = (weakest_eval.get("feedback") or "").strip()
+
+    if not recommendation:
+        weakest_dim_key = sorted_dims[-1][0] if sorted_dims else None
+        dim_desc = {
+            "communication": "Practice structuring your answers clearly before speaking.",
+            "technicalAccuracy": "Review core concepts and practice explaining them out loud.",
+            "confidence": "Work on pacing, reduce filler words, and pause deliberately.",
+            "problemSolving": "Walk through your reasoning step by step before jumping to answers.",
+        }
+        recommendation = dim_desc.get(weakest_dim_key, "Keep practicing across all dimensions.")
+
     return {
         "session_id": session_id,
         "interview_type": session.get("interview_type"),
@@ -124,5 +134,5 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
         "per_question": per_question,
         "strengths": strengths,
         "weaknesses": weaknesses,
-        "recommendation": recommendations.get(weakest, "Keep practicing across all dimensions."),
+        "recommendation": recommendation,
     }
