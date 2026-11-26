@@ -14,8 +14,9 @@ class ScoresShape(BaseModel):
     technicalAccuracy: float
     confidence: float
     problemSolving: float
-
+    
 
 class EvaluationResponse(BaseModel):
-    scores: ScoresShape
+    scores: Optional[ScoresShape] = None
     feedback: str
+    scoring_unavailable: bool = False

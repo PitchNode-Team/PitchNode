@@ -47,6 +47,7 @@ function AiInterviewRoom({ settings, questions }) {
   const [scores, setScores] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [isMockResult, setIsMockResult] = useState(false);
+  const [scoringUnavailable, setScoringUnavailable] = useState(false);
 
   const [answers, setAnswers] = useState([]);
   const [elapsed, setElapsed] = useState(0);
@@ -69,14 +70,6 @@ function AiInterviewRoom({ settings, questions }) {
   const apiMode = sessionId !== "" && sessionId !== "OFFLINE";
 
   /* Server-driven values when the backend is up; local bank otherwise */
-  // const tailoredPrompt = 
-  //   tailoredQuestions && apiQuestion 
-  //   ? (tailoredQuestions[apiQuestion.question_number - 1]?.prompt ??
-  //     tailoredQuestions[apiQuestion.question_number - 1]?.text ??
-  //     null)
-  //   : null;
-
-    /* Server-driven values when the backend is up; local bank otherwise */
   const currentQuestion =
     apiMode && apiQuestion ? apiQuestion.prompt : questions[qIndex];
 
@@ -116,29 +109,14 @@ function AiInterviewRoom({ settings, questions }) {
           throw new Error("Session response missing id");
         }
 
-        // const hasDocs = Boolean(settings.cvId || settings.jobDescriptionId);
-        // let tailored = null;
-        // if (hasDocs) {
-        //   try {
-        //     const gen = await generateQuestionsApi({
-        //         interviewType: settings.type,
-        //         difficulty: settings.difficulty || "medium",
-        //         cvId: settings.cvId || null,
-        //         jdId: settings.jobDescriptionId || null,
-        //         duration: settings.duration || 15,
-        //     })
-            
-        //     if (Array.isArray(gen?.data) && gen.data.length) tailored = gen.data;
-        //   } catch (genErr) {
-        //     console.warn("Tailored generation unavailable — using standard flow.", genErr);
-        //   }
-        // }
-
+        // Generation now happens server-side inside /start: it tailors
+        // questions from the session's CV/JD, persists them as real rows,
+        // and seeds the session with those IDs. /next returns the real
+        // question (with its id), so answers link to it by foreign key.
         await startQuestionsApi(id);
 
         const q = await nextQuestionApi(id);
         setApiQuestion(q?.data);
-        // if (tailored) setTailoredQuestions(tailored);
         setSessionId(id);
       } catch (err) {
         console.warn(
@@ -209,6 +187,7 @@ function AiInterviewRoom({ settings, questions }) {
 
     setScoring(true);
     let result;
+    let unavailable = false;
 
     try{
       if(apiMode && questionId) {
@@ -218,11 +197,26 @@ function AiInterviewRoom({ settings, questions }) {
           questionText: currentQuestion,
           transcript,
         });
-        result = res?.data ? { ...res.data, isMock: false } : null;
-        if (!result) throw new Error("empty-response");
+        const data = res?.data;
+        if (!data) throw new Error("empty-response");
+
+        // Backend saved the answer but Groq scoring failed — not a mock, and
+        // not an error. Keep the answer, show it as unscored, let them advance.
+        if (data.scoring_unavailable) {
+          unavailable = true;
+          result = {
+            scores: null,
+            feedback:
+              data.feedback ||
+              "Scoring is temporarily unavailable. Your answer was saved.",
+            isMock: false,
+          };
+        } else {
+          result = { ...data, isMock: false };
+        }
       } else {
         throw new Error("Offline mode or missing question ID — using mock evaluation");
-      } 
+      }
     } catch(err) {
         console.warn("Live scoring unavailable — using local estimate.", err);
         result = {
@@ -234,20 +228,22 @@ function AiInterviewRoom({ settings, questions }) {
           isMock: true,
         };
     } finally {
-      setScoring(false);  
+      setScoring(false);
     }
 
     setScores(result?.scores);
     setFeedback(result?.feedback);
     setIsMockResult(Boolean(result?.isMock));
+    setScoringUnavailable(unavailable);
     setAnswers((prev) => [
       ...prev.filter((a) => a.index !== index),
-      { 
-        index, 
-        question: currentQuestion, 
+      {
+        index,
+        question: currentQuestion,
         questionId,
-        transcript, 
-        ...result 
+        transcript,
+        scoringUnavailable: unavailable,
+        ...result
       },
     ]);
   };
@@ -256,11 +252,11 @@ function AiInterviewRoom({ settings, questions }) {
     setScores(null);
     setFeedback("");
     setIsMockResult(false);
+    setScoringUnavailable(false);
     resetTranscript();
 
     if (apiMode && apiQuestion) {
       try {
-        // await markAnsweredApi(sessionId, apiQuestion.id);
         const q = await nextQuestionApi(sessionId);
         setApiQuestion(q.data);
       } catch (err) {
@@ -279,10 +275,6 @@ function AiInterviewRoom({ settings, questions }) {
   const finishInterview = () => {
     window.speechSynthesis?.cancel();
 
-    // if (apiMode && apiQuestion) {
-    //   markAnsweredApi(sessionId, apiQuestion.id).catch(() => {});
-    // }
-
     if (apiMode) {
       completeSessionApi(sessionId).catch(() => {}); 
     }
@@ -297,7 +289,9 @@ function AiInterviewRoom({ settings, questions }) {
     });
   };
 
-  const answeredCurrent = scores != null;
+  // An answer counts as submitted once it's scored OR saved-but-unscored
+  // (Groq unavailable). Either way the answer is recorded and they can move on.
+  const answeredCurrent = scores != null || scoringUnavailable;
   const minTimeMet = qSeconds >= MIN_SECONDS;
   const canSubmit = minTimeMet && !scoring;
   const canGoNext = answeredCurrent && minTimeMet;
@@ -448,6 +442,7 @@ function AiInterviewRoom({ settings, questions }) {
             scores={scores} 
             feedback={feedback} 
             isMock={isMockResult}
+            scoringUnavailable={scoringUnavailable}
             />
 
           <SessionInfo

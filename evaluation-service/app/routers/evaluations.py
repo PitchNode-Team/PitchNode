@@ -24,9 +24,9 @@ def evaluate_answer(payload: EvaluationRequest):
     Steps:
       1. Retrieve the interview type and difficulty from the session.
       2. Fetch rubric dimensions for this session's interview_type
-      3. Send transcript + rubric to Groq → get dimension scores + feedback
-      3. Persist evaluation row to DB
-      4. Return the fixed 4-key scores shape the frontend expects
+      3. Persist the transcript first (unscored) so a Groq failure can't lose it
+      4. Score with Groq; on success update the row, on failure keep it unscored
+      5. Mark the question answered only after a successful score
     """
     supabase = get_supabase()
 
@@ -55,7 +55,24 @@ def evaluate_answer(payload: EvaluationRequest):
     if not rubric_result.data:
         raise HTTPException(status_code=500, detail=f"No rubric found for type: {interview_type}")
 
-    # 3. Score using Groq
+    safe_question_id = _as_uuid_or_none(payload.question_id)
+
+    # 3. Persist the transcript FIRST, unscored. If Groq fails afterwards we
+    #    still keep the candidate's words (overall_score stays NULL) instead of
+    #    losing the answer to a 500.
+    insert_result = supabase.table("evaluations").insert({
+        "session_id": payload.session_id,
+        "question_id": safe_question_id,
+        "transcript": payload.transcript,
+        "rubric_scores": None,
+        "dimension_scores": None,
+        "overall_score": None,
+        "feedback": None,
+    }).execute()
+    evaluation_id = insert_result.data[0]["id"]
+
+    # 4. Score using Groq. On failure, leave the saved row unscored and tell the
+    #    frontend scoring is unavailable rather than discarding the answer.
     try:
         result = score_answer(
             question_text=payload.question_text,
@@ -65,25 +82,25 @@ def evaluate_answer(payload: EvaluationRequest):
             rubric_dimensions=rubric_result.data,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scoring failed: {str(e)}")
+        print(f"Scoring unavailable for evaluation {evaluation_id}: {e}")
+        return {
+            "scores": None,
+            "feedback": "Scoring is temporarily unavailable. Your answer was saved and can be re-evaluated.",
+            "scoring_unavailable": True,
+        }
 
     scores = result["scores"]
     overall = round(sum(scores.values()) / len(scores), 1)
 
-    safe_question_id = _as_uuid_or_none(payload.question_id)
-
-    # 4. Persist to evaluations table
-    supabase.table("evaluations").insert({
-        "session_id": payload.session_id,
-        "question_id": safe_question_id,
-        "transcript": payload.transcript,
-        "rubric_scores": result["scores"],         
-        "dimension_scores": result["dimension_scores"],  
+    # 5. Scoring succeeded — fill in the row we already inserted.
+    supabase.table("evaluations").update({
+        "rubric_scores": result["scores"],
+        "dimension_scores": result["dimension_scores"],
         "overall_score": overall,
         "feedback": result["feedback"],
-    }).execute()
+    }).eq("id", evaluation_id).execute()
 
-    # 5. Mark question as answered in session_questions
+    # 6. Mark the question answered only once it has actually been scored.
     if safe_question_id:
         try:
             supabase.table("session_questions").update({"answered": True}).eq(
@@ -95,4 +112,5 @@ def evaluate_answer(payload: EvaluationRequest):
     return {
         "scores": scores,
         "feedback": result["feedback"],
+        "scoring_unavailable": False,
     }
