@@ -53,6 +53,7 @@ function buildViewFromState(state){
       key: a.index,
       number: a.index + 1,
       question: a.question,
+      transcript: a.transcript || "",
       scores: a.scores,
       feedback: a.feedback,
     })),
@@ -76,6 +77,7 @@ function buildViewFromApi (data){
       key: q.question_id || i,
       number: i + 1,
       question: q.question_text || "Question",
+      transcript: q.transcript || "",
       scores: q.scores || {},
       feedback: q.feedback || "",
     })),
@@ -239,6 +241,12 @@ function Results() {
                 <span className="dash-q__num">Q{a.number}</span>
                 {a.question}
               </p>
+              {a.transcript && (
+                <details className="dash-q__answer">
+                  <summary>Show my answer</summary>
+                  <p className="dash-q__transcript">{a.transcript}</p>
+                </details>
+              )}
               <div className="dash-q__metrics">
                 {Object.entries(a.scores).map(([k, v]) => (
                   <div key={k} className="dash-q__metric">

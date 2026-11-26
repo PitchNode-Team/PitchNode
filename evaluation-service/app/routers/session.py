@@ -113,6 +113,7 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
         per_question.append({
             "question_id": e["question_id"],
             "question_text": e["questions"]["prompt"] if e.get("questions") else "",
+            "transcript": e.get("transcript") or "",
             "scores": scores,
             "feedback": e.get("feedback", ""),
         })

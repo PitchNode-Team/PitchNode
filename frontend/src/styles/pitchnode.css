@@ -792,6 +792,43 @@ a {
   padding-top: 12px;
 }
 
+.dash-q__answer {
+  margin: 8px 0 12px;
+}
+
+.dash-q__answer > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  list-style: none;
+  user-select: none;
+}
+
+.dash-q__answer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dash-q__answer > summary::before {
+  content: "▸ ";
+  display: inline-block;
+}
+
+.dash-q__answer[open] > summary::before {
+  content: "▾ ";
+}
+
+.dash-q__transcript {
+  margin-top: 8px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--stroke);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+}
+
 .dash-actions {
   display: flex;
   gap: 12px;
