@@ -1,9 +1,10 @@
 import uuid as uuid_lib
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.models.evaluation import EvaluationRequest, EvaluationResponse
 from app.db.supabase_client import get_supabase
 from app.services.scoring import score_answer
+from app.db.auth import get_current_user
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
@@ -18,7 +19,7 @@ def _as_uuid_or_none(value: str | None) -> str | None:
 
 
 @router.post("", response_model=EvaluationResponse)
-def evaluate_answer(payload: EvaluationRequest):
+def evaluate_answer(payload: EvaluationRequest, current_user: dict = Depends(get_current_user)):
     """
     Scores one spoken answer using Groq + rubric methodology.
     Steps:
@@ -29,11 +30,13 @@ def evaluate_answer(payload: EvaluationRequest):
       5. Mark the question answered only after a successful score
     """
     supabase = get_supabase()
+    user_id = current_user["sub"]
 
-    # 1. Get interview type from session
+    # 1. Get the session and verify ownership — an answer may only be written
+    #    into a session the authenticated user owns.
     session_result = (
         supabase.table("sessions")
-        .select("interview_type, difficulty")
+        .select("user_id, interview_type, difficulty")
         .eq("id", payload.session_id)
         .execute()
     )
@@ -41,6 +44,10 @@ def evaluate_answer(payload: EvaluationRequest):
         raise HTTPException(status_code=404, detail="Session not found")
 
     session = session_result.data[0]
+    if session["user_id"] != user_id:
+        # 404, not 403, so we don't reveal that the session exists.
+        raise HTTPException(status_code=404, detail="Session not found")
+
     interview_type = session["interview_type"]
     difficulty = session.get("difficulty", "medium")
 
@@ -89,7 +96,15 @@ def evaluate_answer(payload: EvaluationRequest):
         }
 
     scores = result["scores"]
-    overall = round(sum(scores.values()) / len(scores), 1)
+    # Overall is the mean of the REAL rubric dimensions actually scored, so it
+    # matches the per-criterion numbers the results page shows. Fall back to the
+    # legacy 4-bucket mean only if no dimension scores came back.
+    dimension_scores = result.get("dimension_scores") or {}
+    dim_values = [float(v) for v in dimension_scores.values() if isinstance(v, (int, float))]
+    if dim_values:
+        overall = round(sum(dim_values) / len(dim_values), 1)
+    else:
+        overall = round(sum(scores.values()) / len(scores), 1)
 
     # 5. Scoring succeeded — fill in the row we already inserted.
     supabase.table("evaluations").update({

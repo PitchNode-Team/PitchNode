@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { 
     generateQuestionsApi, 
-    markAnsweredApi, 
     startQuestionsApi, 
     startSessionApi,
     evaluateAnswerApi,
@@ -102,9 +101,10 @@ export default function useLiveSession({settings, isHost, enabled = true, sessio
            setScoring(true);
            let result;
 
-            // Real question UUID when available, old synthetic placeholder only
-            // when there's genuinely no backend question row at all
-            const idForBackend = questionId || `q${questionIndex + 1}`;
+            // Only ever send a real question UUID. No synthetic "q{n}" fallback:
+            // a fake id can't link to a question row, and the backend nulls it
+            // out anyway. null = unlinked answer (still saved and scored).
+            const idForBackend = questionId || null;
 
             try{
             if(apiMode && transcript?.trim()) {
@@ -152,9 +152,9 @@ export default function useLiveSession({settings, isHost, enabled = true, sessio
                         ...result,
                     },
                 ]);
-                if(apiMode){
-                    markAnsweredApi(sessionId, idForBackend).catch(() => {});
-                }
+                
+                // No separate markAnswered: POST /evaluations marks the question
+                // answered itself after a successful score (see change #4).
             }
             return result;
         }, [apiMode, sessionId]
