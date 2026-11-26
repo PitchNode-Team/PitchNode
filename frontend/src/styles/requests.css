@@ -74,8 +74,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 18px 20px;
+}
+
+/* Expanded answers panel spans the full card width, below the row. */
+.session-answers {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--stroke, #e5e5e5);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-answer__q {
+  display: flex;
+  gap: 8px;
+  font: 600 14px/1.4 var(--display);
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+
+.session-answer__a {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  white-space: pre-wrap;
 }
 
 .session-item--clickable {

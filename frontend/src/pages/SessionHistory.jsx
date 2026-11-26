@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { getHistoryApi } from "../api/interviewApi";
+import { getHistoryApi, getResultsApi } from "../api/interviewApi";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Logo from "../components/Logo";
 
@@ -42,8 +42,34 @@ function SessionHistory() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [sessions, setSessions] = useState([]); 
-    
+    const [sessions, setSessions] = useState([]);
+    // Per-session answer data, lazy-loaded when a card is expanded.
+    const [expandedId, setExpandedId] = useState(null);
+    const [answersById, setAnswersById] = useState({});
+    const [answersLoading, setAnswersLoading] = useState({});
+
+    const toggleAnswers = useCallback(async (sessionId) => {
+        // Collapse if already open.
+        if (expandedId === sessionId) {
+            setExpandedId(null);
+            return;
+        }
+        setExpandedId(sessionId);
+        // Fetch once, then reuse.
+        if (answersById[sessionId]) return;
+        setAnswersLoading((m) => ({ ...m, [sessionId]: true }));
+        try {
+            const res = await getResultsApi(sessionId);
+            setAnswersById((m) => ({ ...m, [sessionId]: res.data?.per_question || [] }));
+        } catch (err) {
+            console.error("Failed to load answers for session", sessionId, err);
+            setAnswersById((m) => ({ ...m, [sessionId]: [] }));
+        } finally {
+            setAnswersLoading((m) => ({ ...m, [sessionId]: false }));
+        }
+    }, [expandedId, answersById]);
+
+
 
     const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +169,16 @@ function SessionHistory() {
 
                             <div className="req-item__actions">
                                 {canView && (
+                                <>
+                                <button
+                                    className="pn-btn pn-btn--ghost"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleAnswers(s.id);
+                                    }}
+                                >
+                                    {expandedId === s.id ? "Hide answers" : "Show answers"}
+                                </button>
                                 <button
                                     className="pn-btn pn-btn--outline"
                                     onClick={(e) => {
@@ -152,8 +188,36 @@ function SessionHistory() {
                                 >
                                     View results
                                 </button>
+                                </>
                                 )}
                             </div>
+
+                            {expandedId === s.id && (
+                                <div
+                                    className="session-answers"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {answersLoading[s.id] ? (
+                                        <p className="admin-empty">Loading answers…</p>
+                                    ) : (answersById[s.id] || []).length === 0 ? (
+                                        <p className="admin-empty">No answers recorded for this session.</p>
+                                    ) : (
+                                        (answersById[s.id] || []).map((q, i) => (
+                                            <div className="session-answer" key={q.question_id || i}>
+                                                <p className="session-answer__q">
+                                                    <span className="dash-q__num">Q{i + 1}</span>
+                                                    {q.question_text || "Question"}
+                                                </p>
+                                                <p className="session-answer__a">
+                                                    {q.transcript
+                                                        ? q.transcript
+                                                        : <em>No answer was recorded.</em>}
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
                             </article>
                         );
                         })}
