@@ -7,7 +7,7 @@ import {
   startQuestionsApi,
   nextQuestionApi,
   completeSessionApi,
-  generateQuestionsApi,
+  // generateQuestionsApi,
 } from "../api/interviewApi";
 
 import VideoPanel from "../components/VideoPanel";
@@ -40,7 +40,7 @@ function AiInterviewRoom({ settings, questions }) {
 
   const [sessionId, setSessionId] = useState("");
   const [apiQuestion, setApiQuestion] = useState(null);
-  const [tailoredQuestions, setTailoredQuestions] = useState(null);
+  // const [tailoredQuestions, setTailoredQuestions] = useState(null);
   const [allAnswered, setAllAnswered] = useState(false);
 
   const [qIndex, setQIndex] = useState(0);
@@ -69,16 +69,16 @@ function AiInterviewRoom({ settings, questions }) {
   const apiMode = sessionId !== "" && sessionId !== "OFFLINE";
 
   /* Server-driven values when the backend is up; local bank otherwise */
-  const tailoredPrompt = 
-    tailoredQuestions && apiQuestion 
-    ? (tailoredQuestions[apiQuestion.question_number - 1]?.prompt ??
-      tailoredQuestions[apiQuestion.question_number - 1]?.text ??
-      null)
-    : null;
-    
+  // const tailoredPrompt = 
+  //   tailoredQuestions && apiQuestion 
+  //   ? (tailoredQuestions[apiQuestion.question_number - 1]?.prompt ??
+  //     tailoredQuestions[apiQuestion.question_number - 1]?.text ??
+  //     null)
+  //   : null;
+
+    /* Server-driven values when the backend is up; local bank otherwise */
   const currentQuestion =
-    tailoredPrompt ??
-    (apiMode && apiQuestion ? apiQuestion.prompt : questions[qIndex]);
+    apiMode && apiQuestion ? apiQuestion.prompt : questions[qIndex];
 
   const questionNumber =
     apiMode && apiQuestion ? apiQuestion.question_number : qIndex + 1;
@@ -116,29 +116,29 @@ function AiInterviewRoom({ settings, questions }) {
           throw new Error("Session response missing id");
         }
 
-        const hasDocs = Boolean(settings.cvId || settings.jobDescriptionId);
-        let tailored = null;
-        if (hasDocs) {
-          try {
-            const gen = await generateQuestionsApi({
-                interviewType: settings.type,
-                difficulty: settings.difficulty || "medium",
-                cvId: settings.cvId || null,
-                jdId: settings.jobDescriptionId || null,
-                duration: settings.duration || 15,
-            })
+        // const hasDocs = Boolean(settings.cvId || settings.jobDescriptionId);
+        // let tailored = null;
+        // if (hasDocs) {
+        //   try {
+        //     const gen = await generateQuestionsApi({
+        //         interviewType: settings.type,
+        //         difficulty: settings.difficulty || "medium",
+        //         cvId: settings.cvId || null,
+        //         jdId: settings.jobDescriptionId || null,
+        //         duration: settings.duration || 15,
+        //     })
             
-            if (Array.isArray(gen?.data) && gen.data.length) tailored = gen.data;
-          } catch (genErr) {
-            console.warn("Tailored generation unavailable — using standard flow.", genErr);
-          }
-        }
+        //     if (Array.isArray(gen?.data) && gen.data.length) tailored = gen.data;
+        //   } catch (genErr) {
+        //     console.warn("Tailored generation unavailable — using standard flow.", genErr);
+        //   }
+        // }
 
         await startQuestionsApi(id);
 
         const q = await nextQuestionApi(id);
         setApiQuestion(q?.data);
-        if (tailored) setTailoredQuestions(tailored);
+        // if (tailored) setTailoredQuestions(tailored);
         setSessionId(id);
       } catch (err) {
         console.warn(
