@@ -112,6 +112,10 @@ def start_session_questions(session_id: str, current_user: dict = Depends(get_cu
                         "interview_type": interview_type,
                         "prompt": q["prompt"],
                         "order": q.get("order", idx + 1),
+                        # Tag generated rows so the static bank fallback can never
+                        # seed another user's tailored questions (privacy).
+                        "source": "generated",
+                        "owner_user_id": user_id,
                     }
                     for idx, q in enumerate(generated)
                     if q.get("prompt")
@@ -128,11 +132,14 @@ def start_session_questions(session_id: str, current_user: dict = Depends(get_cu
                 seeded_questions = None
 
     # --- Static fallback: seed from the pre-written question bank ---
+    # Only the shared static bank — never generated rows, which belong to a
+    # specific user's session and would otherwise leak across users.
     if not seeded_questions:
         questions_result = (
             supabase.table("questions")
             .select("id, order")
             .eq("interview_type", interview_type)
+            .eq("source", "static")
             .order("order")
             .limit(question_count)
             .execute()

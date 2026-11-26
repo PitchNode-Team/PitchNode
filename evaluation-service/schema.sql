@@ -6,15 +6,18 @@ create table if not exists sessions (
     completed_at timestamptz
 );
 
-
 create table if not exists questions (
     id uuid primary key default gen_random_uuid(),
     interview_type text not null check (interview_type in ('technical', 'hr', 'behavioral')),
     prompt text not null,
     "order" integer not null default 0,
+    -- 'static' = shared pre-written bank; 'generated' = tailored to one user's
+    -- session. The static-fallback seeding filters on source='static' so a
+    -- session without CV/JD can never be seeded with another user's questions.
+    source text not null default 'static' check (source in ('static', 'generated')),
+    owner_user_id uuid,
     created_at timestamptz not null default now()
 );
-
 
 create table if not exists rubrics (
     id uuid primary key default gen_random_uuid(),
