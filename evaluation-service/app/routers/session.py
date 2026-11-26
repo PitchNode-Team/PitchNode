@@ -109,9 +109,7 @@ def get_session_results(session_id: str, current_user: dict = Depends(get_curren
     # Average each real dimension across all answers, to rank strengths/weaknesses.
     dim_totals: dict[str, list[float]] = {}
     for e in evals.data:
-        # Prefer the real per-dimension scores; fall back to the old 4-bucket
-        # rubric_scores for evaluations written before dimension_scores existed.
-        scores = e.get("dimension_scores") or e.get("rubric_scores") or {}
+        scores = e.get("dimension_scores") or {}
         per_question.append({
             "question_id": e["question_id"],
             "question_text": e["questions"]["prompt"] if e.get("questions") else "",

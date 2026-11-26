@@ -33,7 +33,6 @@ create table if not exists evaluations (
     session_id uuid not null references sessions(id) on delete cascade,
     question_id uuid references questions(id),
     transcript text,
-    rubric_scores jsonb,        
     overall_score numeric,
     strengths text[],
     improvements text[],

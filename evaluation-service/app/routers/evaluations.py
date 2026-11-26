@@ -64,7 +64,6 @@ def evaluate_answer(payload: EvaluationRequest):
         "session_id": payload.session_id,
         "question_id": safe_question_id,
         "transcript": payload.transcript,
-        "rubric_scores": None,
         "dimension_scores": None,
         "overall_score": None,
         "feedback": None,
@@ -94,7 +93,6 @@ def evaluate_answer(payload: EvaluationRequest):
 
     # 5. Scoring succeeded — fill in the row we already inserted.
     supabase.table("evaluations").update({
-        "rubric_scores": result["scores"],
         "dimension_scores": result["dimension_scores"],
         "overall_score": overall,
         "feedback": result["feedback"],
